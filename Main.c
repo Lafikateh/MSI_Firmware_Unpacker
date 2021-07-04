@@ -4,16 +4,37 @@
 #include <stdlib.h>
 #include <string.h>
 
-// Program Headers
-#include "Main.h"
-#include "Files.h"
-#include "Strings.h"
+bool read_file(FILE* handle, void* buffer, unsigned int* size)
+{
+	if(handle != NULL && size != NULL)
+	{
+		if(buffer != NULL)
+		{
+			fseek(handle, 0, SEEK_END);
+			*size = ftell(handle);
+			fseek(handle, 0, SEEK_SET);
+			fread(buffer, 1, *size, handle);
+		}
+		else
+		{
+			fseek(handle, 0, SEEK_END);
+			*size = ftell(handle);
+			fseek(handle, 0, SEEK_SET);
+		}
+		
+		return true;
+	}
+	else
+	{
+		return false;
+	}
+}
 
 // Program Entry Point
 int main(int argument_count, char* argument_list[])
 {
 	// Print program header
-	printf("MSI UEFI Firmware Unpacker v1.0.0\n");
+	printf("MSI UEFI Firmware Unpacker v1.0.1\n");
 
 	if (argument_count == 1)
 	{
@@ -34,48 +55,48 @@ int main(int argument_count, char* argument_list[])
 		}
 		else
 		{
-			target_path = argument_list[1];
-			target_path = c_replace_string_c(target_path, ".ROM", "_Unpacked.rom");
-			target_path = c_replace_string_c(target_path, ".rom", "_Unpacked.rom");
+			target_path = strdup(argument_list[1]);
+			int length = strlen(target_path);
+			
+			if(strcmp(target_path + (length - 3), "ROM") == 0)
+			{
+				strcpy(target_path + (length - 3), "rom");
+			}
 		}
 
-		// Check if the source file exists
-		if (check_if_exists(source_path) == true)
+		// Attempt to open the source file
+		FILE* source_file = fopen(source_path, "rb");
+		if (source_file != NULL)
 		{
-			// Attempt to read the source file
-			data_buffer* source_buffer = read_file(source_path);
-			if (source_buffer != NULL)
+			// Get the source file size
+			unsigned int source_file_size = 0;
+			read_file(source_file, NULL, &source_file_size);
+			
+			// Read the source file
+			unsigned char* source_file_buffer = malloc(source_file_size);
+			bool read_result = read_file(source_file, source_file_buffer, &source_file_size);
+			if (read_result == true)
 			{
 				// Allocate and zero-fill the target data buffer
-				unsigned long target_data_buffer_size = (source_buffer->size / 2);
-				unsigned char* target_data_buffer = calloc(target_data_buffer_size, sizeof(unsigned char));
+				unsigned long target_file_size = (source_file_size / 2);
+				unsigned char* target_file_buffer = malloc(target_file_size);
 				
 				// Copy the first half of the UEFI image to the target file buffer
-				memcpy(target_data_buffer, source_buffer->data, target_data_buffer_size);
+				memcpy(target_file_buffer, source_file_buffer, target_file_size);
 				
-				// Create the target file buffer
-				data_buffer* target_buffer = create_buffer(target_data_buffer, target_data_buffer_size);
-				
-				// Attempt to write the modified file
-				bool write_result = write_file(target_path, target_buffer);
-				
-				// Free the file buffers
-				free_buffer(target_buffer);
-				free_buffer(source_buffer);
-				
-				// Check if the file was written successfully
-				if (write_result == true)
-				{
-					return 0;
-				}
-				else
-				{
-					// Print error
-					printf("Failed to write file \"%s\"", target_path);
+				// Write the modified file
+				FILE* destination_file = fopen(target_path, "wb");
+				fwrite(target_file_buffer, 1, target_file_size, destination_file);
 
-					// Return failure
-					return 1;
-				}
+				// Free the file buffers
+				free(target_file_buffer);
+				free(source_file_buffer);
+				
+				// Close the file handles
+				fclose(destination_file);
+				fclose(source_file);
+				
+				return 0;
 			}
 			else
 			{
